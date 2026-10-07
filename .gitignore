@@ -1,0 +1,26 @@
+# Visual Studio Auto-generated & Cache
+.vs/
+Debug/
+Release/
+x64/
+x86/
+[Dd]ebug/
+[Rr]elease/
+
+# User-specific files
+*.user
+*.aps
+*.suo
+*.userosv
+*.sln.docstates
+
+# Build outputs & Intermediate files
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.tlog
+*.log
+*.ipch
+*.db
+*.opendb
