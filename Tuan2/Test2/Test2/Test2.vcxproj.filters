@@ -80,5 +80,20 @@
     <Image Include="..\..\..\red-matreshka-inside-icon-icon.ico">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\..\..\..\hb-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\..\..\..\pingus-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\red-matreshka-inside-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\pingus-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\hb-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>
