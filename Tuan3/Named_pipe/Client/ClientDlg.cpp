@@ -231,8 +231,10 @@ DWORD WINAPI CClientDlg::ClientWorkerThread(LPVOID lpParam)
 
     if (strServerReply.GetLength() > 0)
     {
-        TCHAR* pData = new TCHAR[strServerReply.GetLength() + 1];
-        _tcscpy_s(pData, strServerReply.GetLength() + 1, strServerReply.GetString());
+        size_t nLen = static_cast<size_t>(strServerReply.GetLength());
+
+        TCHAR* pData = new TCHAR[nLen + 1];
+        _tcscpy_s(pData, nLen + 1, strServerReply.GetString());
 
         ::PostMessage(hWndDlg, WM_RECEIVE_PIPE_DATA, (WPARAM)pData, 0);
     }
