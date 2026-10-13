@@ -174,35 +174,6 @@ void CClientDlg::LogToUI(const CString& sender, const CString& message)
 	m_listChat.EnsureVisible(nIndex, FALSE);
 }
 
-
-void CClientDlg::OnBnClickedButtonSend()
-{
-	if (m_ConnectSocket == INVALID_SOCKET) {
-		AfxMessageBox(_T("Chưa kết nối tới Server!"), MB_OK | MB_ICONWARNING);
-		return;
-	}
-
-	CString strText;
-	m_editInput.GetWindowText(strText);
-	if (strText.IsEmpty()) return;
-
-	wchar_t sendbuf[DEFAULT_BUFLEN / sizeof(wchar_t)] = { 0 };
-
-	wcscpy_s(sendbuf, DEFAULT_BUFLEN / sizeof(wchar_t), strText.GetString());
-
-	int iResult = send(m_ConnectSocket, (char*)sendbuf, DEFAULT_BUFLEN, 0);
-	if (iResult == SOCKET_ERROR) {
-		closesocket(m_ConnectSocket);
-		m_ConnectSocket = INVALID_SOCKET;
-		WSACleanup();
-	}
-	else {
-		LogToUI(_T("Client"), strText);
-		m_editInput.SetWindowText(_T(""));
-	}
-}
-
-
 void CClientDlg::OnBnClickedButtonConnect()
 {
 	if (m_ConnectSocket != INVALID_SOCKET) {
@@ -233,7 +204,7 @@ void CClientDlg::ClientWorkerThread(CString strIP)
 	}
 
 	ZeroMemory(&hints, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
@@ -303,6 +274,34 @@ CLEANUP_LABEL:
 		m_ConnectSocket = INVALID_SOCKET;
 	}
 	WSACleanup();
+}
+
+
+void CClientDlg::OnBnClickedButtonSend()
+{
+	if (m_ConnectSocket == INVALID_SOCKET) {
+		AfxMessageBox(_T("Chưa kết nối tới Server!"), MB_OK | MB_ICONWARNING);
+		return;
+	}
+
+	CString strText;
+	m_editInput.GetWindowText(strText);
+	if (strText.IsEmpty()) return;
+
+	wchar_t sendbuf[DEFAULT_BUFLEN / sizeof(wchar_t)] = { 0 };
+
+	wcscpy_s(sendbuf, DEFAULT_BUFLEN / sizeof(wchar_t), strText.GetString());
+
+	int iResult = send(m_ConnectSocket, (char*)sendbuf, DEFAULT_BUFLEN, 0);
+	if (iResult == SOCKET_ERROR) {
+		closesocket(m_ConnectSocket);
+		m_ConnectSocket = INVALID_SOCKET;
+		WSACleanup();
+	}
+	else {
+		LogToUI(_T("Client"), strText);
+		m_editInput.SetWindowText(_T(""));
+	}
 }
 
 void CClientDlg::OnDestroy()

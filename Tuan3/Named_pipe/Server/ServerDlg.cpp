@@ -182,8 +182,7 @@ DWORD WINAPI CServerDlg::MainListenThread(LPVOID lpParam)
 		if (hPipe == INVALID_HANDLE_VALUE)
 			break;
 
-		BOOL fConnected = ::ConnectNamedPipe(hPipe, NULL) ?
-			TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
+		BOOL fConnected = ::ConnectNamedPipe(hPipe, NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
 
 		if (fConnected && pDlg->m_bIsRunning)
 		{
