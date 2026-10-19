@@ -49,5 +49,6 @@ public:
 	afx_msg void OnBnClickedButtonSend();
 	afx_msg void OnDestroy();
 	void LogToUI(const CString& sender, const CString& message);
-	void ServerWorkerThread();
+	HANDLE m_hServerThread;
+	static DWORD WINAPI ServerWorkerThread(LPVOID lpParam);
 };

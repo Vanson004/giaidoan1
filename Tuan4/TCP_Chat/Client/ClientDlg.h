@@ -48,7 +48,7 @@ public:
 	CEdit m_editInput;
 	CEdit m_editIP;
 	void LogToUI(const CString& sender, const CString& message);
-	void ClientWorkerThread(CString strIP);
+	static DWORD WINAPI ClientWorkerThread(LPVOID lpParam);
 	afx_msg void OnBnClickedButtonSend();
 	afx_msg void OnBnClickedButtonConnect();
 	afx_msg void OnDestroy();

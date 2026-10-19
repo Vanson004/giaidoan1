@@ -43,10 +43,11 @@ public:
 	SOCKET m_ListenSocket = INVALID_SOCKET;
 	SOCKET m_ClientSocket = INVALID_SOCKET;
 	bool   m_isServerRunning = false;
+	HANDLE m_hServerThread;
 	CListCtrl m_listChat;
 	CEdit m_editInput;
 	afx_msg void OnBnClickedButtonSend();
 	afx_msg void OnDestroy();
 	void LogToUI(const CString& sender, const CString& message);
-	void ServerWorkerThread();
+	static DWORD WINAPI ServerWorkerThread(LPVOID lpParam);
 };

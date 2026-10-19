@@ -174,6 +174,11 @@ void CClientDlg::LogToUI(const CString& sender, const CString& message)
 	m_listChat.EnsureVisible(nIndex, FALSE);
 }
 
+struct ThreadParams {
+	CClientDlg* pDlg = nullptr;
+	CString strIP;
+};
+
 void CClientDlg::OnBnClickedButtonConnect()
 {
 	if (m_ConnectSocket != INVALID_SOCKET) {
@@ -189,18 +194,36 @@ void CClientDlg::OnBnClickedButtonConnect()
 	}
 
 	m_isClientRunning = true;
-	std::thread(&CClientDlg::ClientWorkerThread, this, strIP).detach();
-}
 
-void CClientDlg::ClientWorkerThread(CString strIP)
+	ThreadParams* params = new ThreadParams();
+	params->pDlg = this;
+	params->strIP = strIP;
+
+	HANDLE hThread = CreateThread(NULL, 0, ClientWorkerThread, params, 0, NULL);
+
+	if (hThread == NULL) {
+		AfxMessageBox(_T("Không thể tạo luồng kết nối!"), MB_OK | MB_ICONERROR);
+		delete params; 
+		m_isClientRunning = false;
+	}
+	else {
+		CloseHandle(hThread);
+	}
+}
+DWORD WINAPI CClientDlg::ClientWorkerThread(LPVOID lpParam)
 {
+	ThreadParams* params = (ThreadParams*)lpParam;
+	CClientDlg* pThis = params->pDlg;
+	CString strIP = params->strIP;
+	delete params;
+
 	WSADATA wsaData;
 	struct addrinfo* result = NULL, * ptr = NULL, hints;
 	int iResult;
 
 	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (iResult != 0) {
-		return;
+		return 0;
 	}
 
 	ZeroMemory(&hints, sizeof(hints));
@@ -213,20 +236,20 @@ void CClientDlg::ClientWorkerThread(CString strIP)
 	iResult = getaddrinfo(ipAscii, DEFAULT_PORT, &hints, &result);
 	if (iResult != 0) {
 		WSACleanup();
-		return;
+		return 0;
 	}
 
 	for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
-		m_ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-		if (m_ConnectSocket == INVALID_SOCKET) {
+		pThis->m_ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+		if (pThis->m_ConnectSocket == INVALID_SOCKET) {
 			WSACleanup();
-			return;
+			return 0;
 		}
 
-		iResult = connect(m_ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+		iResult = connect(pThis->m_ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
 		if (iResult == SOCKET_ERROR) {
-			closesocket(m_ConnectSocket);
-			m_ConnectSocket = INVALID_SOCKET;
+			closesocket(pThis->m_ConnectSocket);
+			pThis->m_ConnectSocket = INVALID_SOCKET;
 			continue;
 		}
 		break;
@@ -234,23 +257,23 @@ void CClientDlg::ClientWorkerThread(CString strIP)
 
 	freeaddrinfo(result);
 
-	if (m_ConnectSocket == INVALID_SOCKET) {
+	if (pThis->m_ConnectSocket == INVALID_SOCKET) {
 		AfxMessageBox(_T("Không thể kết nối tới Server!"), MB_OK | MB_ICONERROR);
 		WSACleanup();
-		return;
+		return 0;
 	}
 
 	AfxMessageBox(_T("Đã kết nối thành công tới Server!"), MB_OK | MB_ICONINFORMATION);
 
 	wchar_t recvbuf[DEFAULT_BUFLEN / sizeof(wchar_t)];
 
-	while (m_isClientRunning)
+	while (pThis->m_isClientRunning)
 	{
 		int totalBytesReceived = 0;
 
 		while (totalBytesReceived < DEFAULT_BUFLEN)
 		{
-			iResult = recv(m_ConnectSocket, ((char*)recvbuf) + totalBytesReceived, DEFAULT_BUFLEN - totalBytesReceived, 0);
+			iResult = recv(pThis->m_ConnectSocket, ((char*)recvbuf) + totalBytesReceived, DEFAULT_BUFLEN - totalBytesReceived, 0);
 			if (iResult > 0)
 			{
 				totalBytesReceived += iResult;
@@ -264,18 +287,19 @@ void CClientDlg::ClientWorkerThread(CString strIP)
 		recvbuf[(DEFAULT_BUFLEN / sizeof(wchar_t)) - 1] = L'\0';
 
 		CString strMsg(recvbuf);
-		LogToUI(_T("Server"), strMsg);
+		pThis->LogToUI(_T("Server"), strMsg);
 	}
 
 CLEANUP_LABEL:
-	if (m_ConnectSocket != INVALID_SOCKET) {
-		shutdown(m_ConnectSocket, SD_SEND);
-		closesocket(m_ConnectSocket);
-		m_ConnectSocket = INVALID_SOCKET;
+	if (pThis->m_ConnectSocket != INVALID_SOCKET) {
+		shutdown(pThis->m_ConnectSocket, SD_SEND);
+		closesocket(pThis->m_ConnectSocket);
+		pThis->m_ConnectSocket = INVALID_SOCKET;
 	}
 	WSACleanup();
-}
 
+	return 0; 
+}
 
 void CClientDlg::OnBnClickedButtonSend()
 {

@@ -52,6 +52,7 @@ END_MESSAGE_MAP()
 
 CServerDlg::CServerDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_SERVER_DIALOG, pParent)
+    , m_hServerThread(NULL)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -111,7 +112,15 @@ BOOL CServerDlg::OnInitDialog()
 	m_ClientSocket = INVALID_SOCKET;
 	m_isServerRunning = true;
 
-	std::thread(&CServerDlg::ServerWorkerThread, this).detach();
+    m_hServerThread = CreateThread(NULL, 0, ServerWorkerThread, this, 0, NULL);
+
+    if (m_hServerThread == NULL) {
+        AfxMessageBox(_T("Không thể tạo luồng Server!"), MB_OK | MB_ICONERROR);
+        m_isServerRunning = false;
+    }
+    else {
+        CloseHandle(m_hServerThread);
+    }
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -173,8 +182,10 @@ void CServerDlg::LogToUI(const CString& sender, const CString& message)
 	m_listChat.EnsureVisible(nIndex, FALSE);
 }
 
-void CServerDlg::ServerWorkerThread()
+DWORD WINAPI CServerDlg::ServerWorkerThread(LPVOID lpParam)
 {
+    CServerDlg* pThis = (CServerDlg*)lpParam;
+
     WSADATA wsaData;
     int iResult;
 
@@ -183,7 +194,7 @@ void CServerDlg::ServerWorkerThread()
 
     iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (iResult != 0) {
-        return;
+        return 0;
     }
 
     ZeroMemory(&hints, sizeof(hints));
@@ -195,52 +206,55 @@ void CServerDlg::ServerWorkerThread()
     iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
     if (iResult != 0) {
         WSACleanup();
-        return;
+        return 0;
     }
 
-    m_ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (m_ListenSocket == INVALID_SOCKET) {
+    pThis->m_ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    if (pThis->m_ListenSocket == INVALID_SOCKET) {
         freeaddrinfo(result);
         WSACleanup();
-        return;
+        return 0;
     }
 
-    iResult = bind(m_ListenSocket, result->ai_addr, (int)result->ai_addrlen);
+    iResult = bind(pThis->m_ListenSocket, result->ai_addr, (int)result->ai_addrlen);
     if (iResult == SOCKET_ERROR) {
         freeaddrinfo(result);
-        closesocket(m_ListenSocket);
+        closesocket(pThis->m_ListenSocket);
+        pThis->m_ListenSocket = INVALID_SOCKET;
         WSACleanup();
-        return;
+        return 0;
     }
 
     freeaddrinfo(result);
 
-    iResult = listen(m_ListenSocket, SOMAXCONN);
+    iResult = listen(pThis->m_ListenSocket, SOMAXCONN);
     if (iResult == SOCKET_ERROR) {
-        closesocket(m_ListenSocket);
+        closesocket(pThis->m_ListenSocket);
+        pThis->m_ListenSocket = INVALID_SOCKET;
         WSACleanup();
-        return;
+        return 0;
     }
 
-    m_ClientSocket = accept(m_ListenSocket, NULL, NULL);
-    if (m_ClientSocket == INVALID_SOCKET) {
-        closesocket(m_ListenSocket);
+    pThis->m_ClientSocket = accept(pThis->m_ListenSocket, NULL, NULL);
+    if (pThis->m_ClientSocket == INVALID_SOCKET) {
+        closesocket(pThis->m_ListenSocket);
+        pThis->m_ListenSocket = INVALID_SOCKET;
         WSACleanup();
-        return;
+        return 0;
     }
 
-    closesocket(m_ListenSocket);
-    m_ListenSocket = INVALID_SOCKET;
+    closesocket(pThis->m_ListenSocket);
+    pThis->m_ListenSocket = INVALID_SOCKET;
 
     wchar_t recvbuf[DEFAULT_BUFLEN / sizeof(wchar_t)];
 
-    while (m_isServerRunning)
+    while (pThis->m_isServerRunning)
     {
         int totalBytesReceived = 0;
 
         while (totalBytesReceived < DEFAULT_BUFLEN)
         {
-            iResult = recv(m_ClientSocket, ((char*)recvbuf) + totalBytesReceived, DEFAULT_BUFLEN - totalBytesReceived, 0);
+            iResult = recv(pThis->m_ClientSocket, ((char*)recvbuf) + totalBytesReceived, DEFAULT_BUFLEN - totalBytesReceived, 0);
             if (iResult > 0)
             {
                 totalBytesReceived += iResult;
@@ -254,19 +268,19 @@ void CServerDlg::ServerWorkerThread()
         recvbuf[(DEFAULT_BUFLEN / sizeof(wchar_t)) - 1] = L'\0';
 
         CString strMsg(recvbuf);
-        LogToUI(_T("Client"), strMsg);
+        pThis->LogToUI(_T("Client"), strMsg);
     }
 
 CLEANUP_LABEL:
-    if (m_ClientSocket != INVALID_SOCKET) {
-        shutdown(m_ClientSocket, SD_SEND);
-        closesocket(m_ClientSocket);
-        m_ClientSocket = INVALID_SOCKET;
+    if (pThis->m_ClientSocket != INVALID_SOCKET) {
+        shutdown(pThis->m_ClientSocket, SD_SEND);
+        closesocket(pThis->m_ClientSocket);
+        pThis->m_ClientSocket = INVALID_SOCKET;
     }
     WSACleanup();
+
+    return 0;
 }
-
-
 void CServerDlg::OnBnClickedButtonSend()
 {
     if (m_ClientSocket == INVALID_SOCKET) {
