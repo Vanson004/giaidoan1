@@ -35,12 +35,10 @@ CChatClientDlg::CChatClientDlg(CWnd* pParent /*=nullptr*/)
       m_bRunning(0)
 {
     m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
-    InitializeCriticalSection(&m_csQueue);
 }
 
 CChatClientDlg::~CChatClientDlg()
 {
-    DeleteCriticalSection(&m_csQueue);
 }
 
 void CChatClientDlg::DoDataExchange(CDataExchange* pDX)
@@ -57,8 +55,7 @@ BEGIN_MESSAGE_MAP(CChatClientDlg, CDialogEx)
     ON_WM_QUERYDRAGICON()
     ON_WM_DESTROY()
     ON_BN_CLICKED(IDC_BUTTON_SEND, &CChatClientDlg::OnBnClickedButtonSend)
-    ON_LBN_SELCHANGE(IDC_LIST_FRIENDS, &CChatClientDlg::OnSelectFriend)
-    ON_LBN_DBLCLK(IDC_LIST_FRIENDS, &CChatClientDlg::OnSelectFriend)
+    ON_NOTIFY(NM_CLICK, IDC_LIST_FRIENDS, &CChatClientDlg::OnNMClickListFriends)
     ON_MESSAGE(WM_RECEIVE_MSG, &CChatClientDlg::OnReceiveMessage)
     ON_MESSAGE(WM_SERVER_DISCONN, &CChatClientDlg::OnServerDisconnect)
     ON_MESSAGE(WM_USER_STATUS, &CChatClientDlg::OnUserStatus)
@@ -96,6 +93,22 @@ HCURSOR CChatClientDlg::OnQueryDragIcon()
     return static_cast<HCURSOR>(m_hIcon);
 }
 
+BOOL CChatClientDlg::PreTranslateMessage(MSG* pMsg)
+{
+    if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN) {
+        if (GetFocus() == &m_editMessage) {
+            enterSend();
+            return TRUE;
+        }
+    }
+    return CDialogEx::PreTranslateMessage(pMsg);
+}
+
+void CChatClientDlg::enterSend()
+{
+    OnBnClickedButtonSend();
+}
+
 BOOL CChatClientDlg::OnInitDialog()
 {
     CDialogEx::OnInitDialog();
@@ -110,13 +123,41 @@ BOOL CChatClientDlg::OnInitDialog()
             pSysMenu->AppendMenu(MF_STRING, IDM_ABOUTBOX, strAboutMenu);
         }
     }
+    int resIcons[4] = { IDI_ICON_User1, IDI_ICON_User2, IDI_ICON_User3, IDI_ICON_User4 };
+    int myIconIdx = layIconUser(m_strCurrentUsername);
+    HICON hMyIcon = (HICON)::LoadImage(AfxGetResourceHandle(), MAKEINTRESOURCE(resIcons[myIconIdx]), IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR);
+    if (hMyIcon) {
+        m_hIcon = hMyIcon;
+    }
     SetIcon(m_hIcon, TRUE);
     SetIcon(m_hIcon, FALSE);
+
+    if (!m_strCurrentUsername.IsEmpty()) {
+        SetWindowTextW(m_strCurrentUsername);
+    }
 
     m_richChat.SetBackgroundColor(FALSE, RGB(255, 255, 255));
     m_richChat.SetReadOnly(TRUE);
     m_richChat.SetEventMask(m_richChat.GetEventMask() | ENM_SELCHANGE | ENM_MOUSEEVENTS);
-    m_richChat.SendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(10, 20));
+    m_richChat.SendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(10, 15));
+
+    m_imageList.Create(20, 20, ILC_COLOR32 | ILC_MASK, 4, 4);
+    for (int i = 0; i < 4; i++) {
+        HICON hIcon = (HICON)::LoadImage(AfxGetResourceHandle(), MAKEINTRESOURCE(resIcons[i]), IMAGE_ICON, 20, 20, LR_DEFAULTCOLOR);
+        if (hIcon) {
+            m_imageList.Add(hIcon);
+            DestroyIcon(hIcon);
+        } else {
+            m_imageList.Add(AfxGetApp()->LoadIcon(resIcons[i]));
+        }
+    }
+
+    m_listOnline.SetImageList(&m_imageList, LVSIL_SMALL);
+    m_listOnline.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    CRect rcList;
+    m_listOnline.GetClientRect(&rcList);
+    int colWidth = (rcList.Width() > 0) ? (rcList.Width() - 4) : 120;
+    m_listOnline.InsertColumn(0, _T("Friends"), LVCFMT_LEFT, colWidth);
     if (m_hSocket == INVALID_SOCKET) {
         AfxMessageBox(_T("Socket khong hop le"), MB_ICONERROR);
         EndDialog(IDCANCEL);
@@ -171,49 +212,51 @@ void CChatClientDlg::RecvThreadFunc()
             string timeStr = resJson.value("time", "");
             int isRead = resJson.value("isRead", 0);
             if (!sender.empty() && !content.empty()) {
-                TinNhan msg;
-                msg.sender = KetNoi::toCString(sender);
-                msg.receiver = KetNoi::toCString(receiver);
-                msg.content = KetNoi::toCString(content);
-                msg.time = timeStr.empty() ? KetNoi::toCString(KetNoi::getTime()) : KetNoi::toCString(timeStr);
-                msg.daXem = isRead;
-                EnterCriticalSection(&m_csQueue);
-                m_queueTin.push(msg);
-                LeaveCriticalSection(&m_csQueue);
-                if (::IsWindow(m_hWnd)) PostMessage(WM_RECEIVE_MSG, 0, 0);
+                TinNhan* pMsg = new TinNhan();
+                pMsg->sender = KetNoi::toCString(sender);
+                pMsg->receiver = KetNoi::toCString(receiver);
+                pMsg->content = KetNoi::toCString(content);
+                pMsg->time = timeStr.empty() ? KetNoi::toCString(KetNoi::getTime()) : KetNoi::toCString(timeStr);
+                pMsg->daXem = isRead;
+                if (::IsWindow(m_hWnd)) {
+                    PostMessage(WM_RECEIVE_MSG, 0, (LPARAM)pMsg);
+                } else {
+                    delete pMsg;
+                }
             }
         }
         else if (action == ACTION_USER_STATUS) {
             string user = resJson.value("user","");
             string status = resJson.value("status","");
             if (!user.empty()) {
-                TrangThaiUser evt;
-                evt.username = KetNoi::toCString(user);
-                evt.isOnline = (status == "online");
-                EnterCriticalSection(&m_csQueue);
-                m_queueTrangThai.push(evt);
-                LeaveCriticalSection(&m_csQueue);
-
-                if (::IsWindow(m_hWnd)) PostMessage(WM_USER_STATUS, 0, 0);
+                TrangThaiUser* pEvt = new TrangThaiUser();
+                pEvt->username = KetNoi::toCString(user);
+                pEvt->isOnline = (status == "online");
+                if (::IsWindow(m_hWnd)) {
+                    PostMessage(WM_USER_STATUS, 0, (LPARAM)pEvt);
+                } else {
+                    delete pEvt;
+                }
             }
         }
         else if (action == ACTION_MSG_READ) {
             string reader = resJson.value("reader", "");
             if (!reader.empty()) {
-                ThongBaoDaXem evt;
-                evt.nguoiXem = KetNoi::toCString(reader);
-                EnterCriticalSection(&m_csQueue);
-                m_queueDaXem.push(evt);
-                LeaveCriticalSection(&m_csQueue);
-                if (::IsWindow(m_hWnd)) PostMessage(WM_MESSAGE_STATUS, 0, 0);
+                ThongBaoDaXem* pEvt = new ThongBaoDaXem();
+                pEvt->nguoiXem = KetNoi::toCString(reader);
+                if (::IsWindow(m_hWnd)) {
+                    PostMessage(WM_MESSAGE_STATUS, 0, (LPARAM)pEvt);
+                } else {
+                    delete pEvt;
+                }
             }
         }
         else if (action == ACTION_GET_HISTORY) {
             string status = resJson.value("status", "");
             string friendName = resJson.value("friend", "");
             if (status == RES_SUCCESS) {
-                LichSuChat hEvt;
-                hEvt.friendName = KetNoi::toCString(friendName);
+                LichSuChat* pEvt = new LichSuChat();
+                pEvt->friendName = KetNoi::toCString(friendName);
                 if (resJson.contains("messages") && resJson["messages"].is_array()) {
                     for (const auto& item : resJson["messages"]) {
                         TinNhan m;
@@ -222,93 +265,69 @@ void CChatClientDlg::RecvThreadFunc()
                         m.content = KetNoi::toCString(item.value("content", ""));
                         m.time = KetNoi::toCString(item.value("time", ""));
                         m.daXem = item.value("isRead", 0);
-                        hEvt.dsTinNhan.push_back(m);
+                        pEvt->dsTinNhan.push_back(m);
                     }
                 }
-                EnterCriticalSection(&m_csQueue);
-                m_queueLichSu.push(hEvt);
-                LeaveCriticalSection(&m_csQueue);
-                if (::IsWindow(m_hWnd)) PostMessage(WM_RECEIVE_HISTORY, 0, 0);
+                if (::IsWindow(m_hWnd)) {
+                    PostMessage(WM_RECEIVE_HISTORY, 0, (LPARAM)pEvt);
+                } else {
+                    delete pEvt;
+                }
             }
         }
     }
 }
 
-LRESULT CChatClientDlg::OnReceiveMessage(WPARAM, LPARAM)
+LRESULT CChatClientDlg::OnReceiveMessage(WPARAM, LPARAM lParam)
 {
-    queue<TinNhan> localQueue;
-    {
-        EnterCriticalSection(&m_csQueue);
-        swap(localQueue, m_queueTin);
-        LeaveCriticalSection(&m_csQueue);
-    }
-    while (!localQueue.empty()) {
-        TinNhan msg = localQueue.front();
-        localQueue.pop();
-        if (m_strSelectedFriend.CompareNoCase(msg.sender) == 0 || m_strSelectedFriend.CompareNoCase(msg.receiver) == 0) {
-            if (m_strSelectedFriend.CompareNoCase(msg.sender) == 0) {
-                loadLichSu(m_strSelectedFriend);
-            } else {
-                hienThiTin(msg.sender, msg.content, msg.time, msg.daXem);
-            }
-        }
-    }
-    return 0;
-}
+    TinNhan* pMsg = reinterpret_cast<TinNhan*>(lParam);
+    if (!pMsg) return 0;
 
-LRESULT CChatClientDlg::OnReceiveHistory(WPARAM, LPARAM)
-{
-    queue<LichSuChat> localQueue;
-    {
-        EnterCriticalSection(&m_csQueue);
-        swap(localQueue, m_queueLichSu);
-        LeaveCriticalSection(&m_csQueue);
-    }
-    while (!localQueue.empty()) {
-        LichSuChat evt = localQueue.front();
-        localQueue.pop();
-        if (evt.friendName.CompareNoCase(m_strSelectedFriend) == 0) {
-            m_richChat.SetWindowTextW(_T(""));
-            for (const auto&m : evt.dsTinNhan) {
-                hienThiTin(m.sender,m.content,m.time, m.daXem);
-            }
-        }
-    }
-    return 0;
-}
-
-LRESULT CChatClientDlg::OnMessageStatus(WPARAM, LPARAM)
-{
-    queue<ThongBaoDaXem> localQueue;
-    {
-        EnterCriticalSection(&m_csQueue);
-        swap(localQueue, m_queueDaXem);
-        LeaveCriticalSection(&m_csQueue);
-    }
-    while (!localQueue.empty()) {
-        ThongBaoDaXem evt = localQueue.front();
-        localQueue.pop();
-
-        if (!m_strSelectedFriend.IsEmpty() && evt.nguoiXem.CompareNoCase(m_strSelectedFriend) == 0) {
+    if (m_strSelectedFriend.CompareNoCase(pMsg->sender) == 0 || m_strSelectedFriend.CompareNoCase(pMsg->receiver) == 0) {
+        if (m_strSelectedFriend.CompareNoCase(pMsg->sender) == 0) {
             loadLichSu(m_strSelectedFriend);
+        } else {
+            hienThiTin(pMsg->sender, pMsg->content, pMsg->time, pMsg->daXem);
         }
     }
+    delete pMsg;
     return 0;
 }
 
-LRESULT CChatClientDlg::OnUserStatus(WPARAM, LPARAM)
+LRESULT CChatClientDlg::OnReceiveHistory(WPARAM, LPARAM lParam)
 {
-    queue<TrangThaiUser> localQueue;
-    {
-        EnterCriticalSection(&m_csQueue);
-        swap(localQueue, m_queueTrangThai);
-        LeaveCriticalSection(&m_csQueue);
+    LichSuChat* pEvt = reinterpret_cast<LichSuChat*>(lParam);
+    if (!pEvt) return 0;
+
+    if (pEvt->friendName.CompareNoCase(m_strSelectedFriend) == 0) {
+        m_richChat.SetWindowTextW(_T(""));
+        for (const auto& m : pEvt->dsTinNhan) {
+            hienThiTin(m.sender, m.content, m.time, m.daXem);
+        }
     }
-    while (!localQueue.empty()) {
-        TrangThaiUser evt = localQueue.front();
-        localQueue.pop();
-        updateDanhSachBan(evt.username, evt.isOnline);
+    delete pEvt;
+    return 0;
+}
+
+LRESULT CChatClientDlg::OnMessageStatus(WPARAM, LPARAM lParam)
+{
+    ThongBaoDaXem* pEvt = reinterpret_cast<ThongBaoDaXem*>(lParam);
+    if (!pEvt) return 0;
+
+    if (!m_strSelectedFriend.IsEmpty() && pEvt->nguoiXem.CompareNoCase(m_strSelectedFriend) == 0) {
+        loadLichSu(m_strSelectedFriend);
     }
+    delete pEvt;
+    return 0;
+}
+
+LRESULT CChatClientDlg::OnUserStatus(WPARAM, LPARAM lParam)
+{
+    TrangThaiUser* pEvt = reinterpret_cast<TrangThaiUser*>(lParam);
+    if (!pEvt) return 0;
+
+    updateDanhSachBan(pEvt->username, pEvt->isOnline);
+    delete pEvt;
     return 0;
 }
 
@@ -322,12 +341,26 @@ LRESULT CChatClientDlg::OnServerDisconnect(WPARAM, LPARAM)
     return 0;
 }
 
-void CChatClientDlg::OnSelectFriend()
+void CChatClientDlg::OnNMClickListFriends(NMHDR* pNMHDR, LRESULT* pResult)
 {
-    int sel = m_listOnline.GetCurSel();
-    if (sel == LB_ERR) return;
-    CString strItem;
-    m_listOnline.GetText(sel, strItem);
+    LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
+    int nItem = (pNMItemActivate != nullptr) ? pNMItemActivate->iItem : -1;
+    if (nItem == -1) {
+        POSITION pos = m_listOnline.GetFirstSelectedItemPosition();
+        if (pos != NULL) {
+            nItem = m_listOnline.GetNextSelectedItem(pos);
+        }
+    }
+    if (nItem != -1) {
+        chonBan(nItem);
+    }
+    *pResult = 0;
+}
+
+void CChatClientDlg::chonBan(int nIndex)
+{
+    if (nIndex < 0 || nIndex >= m_listOnline.GetItemCount()) return;
+    CString strItem = m_listOnline.GetItemText(nIndex, 0);
 
     int spacePos = strItem.Find(_T(' '));
     CString friendName = (spacePos != -1) ? strItem.Left(spacePos) : strItem;
@@ -341,7 +374,6 @@ void CChatClientDlg::OnSelectFriend()
         return;
     }
     m_strSelectedFriend = friendName;
-    SetWindowTextW(m_strSelectedFriend);
     m_richChat.SetWindowTextW(_T(""));
     loadLichSu(m_strSelectedFriend);
     m_editMessage.SetFocus();
@@ -387,7 +419,7 @@ bool CChatClientDlg::sendMessage(const string& receiver, const string& content)
     return KetNoi::sendPacket(m_hSocket, ACTION_CHAT, packet.dump());
 }
 
-void CChatClientDlg::themDongChat(const CString& text, COLORREF color, bool bBold, WORD alignment)
+void CChatClientDlg::themDongChat(const CString& text, COLORREF color, bool bBold, WORD alignment, int fontSize)
 {
     long nStart = m_richChat.GetTextLength();
     m_richChat.SetSel(nStart, nStart);
@@ -398,17 +430,22 @@ void CChatClientDlg::themDongChat(const CString& text, COLORREF color, bool bBol
     pf.wAlignment = alignment;
     if (alignment == PFA_RIGHT) {
         pf.dwMask |= PFM_RIGHTINDENT;
-        pf.dxRightIndent = 300;
+        pf.dxRightIndent = 250;
+    } else {
+        pf.dwMask |= PFM_STARTINDENT;
+        pf.dxStartIndent = 150;
     }
     m_richChat.SendMessage(EM_SETPARAFORMAT, 0, (LPARAM)&pf);
+
     CHARFORMAT2 cf{};
     cf.cbSize = sizeof(cf);
     cf.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE | CFM_FACE;
     cf.crTextColor = color;
     cf.dwEffects = bBold ? CFE_BOLD : 0;
-    cf.yHeight = 200;
+    cf.yHeight = fontSize;
     _tcscpy_s(cf.szFaceName, _T("Segoe UI"));
     m_richChat.SendMessage(EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+
     m_richChat.ReplaceSel(text + _T("\r\n"));
     m_richChat.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 }
@@ -426,21 +463,35 @@ void CChatClientDlg::hienThiTin(const CString& sender, const CString& content, c
             if (isRead == 1) {
                 header.Format(_T("Ban (%s) (Da xem)"), static_cast<LPCTSTR>(shortTime));
             } else {
-                header.Format(_T("Ban (%s) (Chua xem)"), static_cast<LPCTSTR>(shortTime));
+                header.Format(_T("Ban (%s) (Da nhan)"), static_cast<LPCTSTR>(shortTime));
             }
         }
-        themDongChat(header, RGB(0, 102, 204), true, PFA_RIGHT);
-        themDongChat(content, RGB(20, 20, 20), false, PFA_RIGHT);
-        themDongChat(_T(""), RGB(0, 0, 0), false, PFA_RIGHT);
+        themDongChat(header, RGB(0, 102, 204), true, PFA_RIGHT, 180);
+        themDongChat(content, RGB(30, 30, 30), false, PFA_RIGHT, 210);
+        themDongChat(_T(""), RGB(0, 0, 0), false, PFA_RIGHT, 80);
     } else {
         CString header = sender;
         if (!shortTime.IsEmpty()) {
             header.Format(_T("%s (%s)"), static_cast<LPCTSTR>(sender), static_cast<LPCTSTR>(shortTime));
         }
-        themDongChat(header, RGB(204, 0, 0), true, PFA_LEFT);
-        themDongChat(content, RGB(20, 20, 20), false, PFA_LEFT);
-        themDongChat(_T(""), RGB(0, 0, 0), false, PFA_LEFT);
+        themDongChat(header, RGB(204, 0, 0), true, PFA_LEFT, 180);
+        themDongChat(content, RGB(30, 30, 30), false, PFA_LEFT, 210);
+        themDongChat(_T(""), RGB(0, 0, 0), false, PFA_LEFT, 80);
     }
+}
+
+int CChatClientDlg::layIconUser(const CString& username)
+{
+    if (username.CompareNoCase(_T("user1")) == 0 || username.CompareNoCase(_T("userA")) == 0) return 0;
+    if (username.CompareNoCase(_T("user2")) == 0 || username.CompareNoCase(_T("userB")) == 0) return 1;
+    if (username.CompareNoCase(_T("user3")) == 0 || username.CompareNoCase(_T("userC")) == 0) return 2;
+    if (username.CompareNoCase(_T("user4")) == 0 || username.CompareNoCase(_T("userD")) == 0) return 3;
+
+    if (!username.IsEmpty()) {
+        int code = (int)username[0];
+        return abs(code) % 4;
+    }
+    return 0;
 }
 
 void CChatClientDlg::updateDanhSachBan(const CString& user, bool bOnline)
@@ -449,18 +500,25 @@ void CChatClientDlg::updateDanhSachBan(const CString& user, bool bOnline)
         return;
     }
     CString newText = user + (bOnline ? _T(" (online)") : _T(" (offline)"));
-    for (int i = 0; i < m_listOnline.GetCount(); i++) {
-        CString s;
-        m_listOnline.GetText(i, s);
+    int imgIdx = layIconUser(user);
+
+    for (int i = 0; i < m_listOnline.GetItemCount(); i++) {
+        CString s = m_listOnline.GetItemText(i, 0);
         int spacePos = s.Find(_T(' '));
         CString existingName = (spacePos != -1) ? s.Left(spacePos) : s;
         if (existingName.CompareNoCase(user) == 0) {
-            m_listOnline.DeleteString(i);
-            m_listOnline.InsertString(i, newText);
+            LVITEM item{};
+            item.iItem = i;
+            item.iSubItem = 0;
+            item.mask = LVIF_TEXT | LVIF_IMAGE;
+            item.pszText = (LPTSTR)(LPCTSTR)newText;
+            item.iImage = imgIdx;
+            m_listOnline.SetItem(&item);
             return;
         }
     }
-    m_listOnline.AddString(newText);
+    int nItem = m_listOnline.GetItemCount();
+    m_listOnline.InsertItem(nItem, newText, imgIdx);
 }
 
 void CChatClientDlg::OnDestroy()

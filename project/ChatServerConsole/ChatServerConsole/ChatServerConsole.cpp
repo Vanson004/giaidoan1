@@ -230,10 +230,8 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
                 sendPacket(clientSocket, ACTION_CHAT, res.dump());
                 continue;
             }
-
             SOCKET recvSocket = FindOnlineSocket(receiver);
             bool isOnline = (recvSocket != INVALID_SOCKET);
-
             Database::saveMessage(sender, receiver, content, 0);
 
             if (isOnline) {

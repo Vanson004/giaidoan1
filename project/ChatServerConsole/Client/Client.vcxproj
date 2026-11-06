@@ -204,7 +204,7 @@
     <ClCompile Include="Client.cpp" />
     <ClCompile Include="ClientDlg.cpp" />
     <ClCompile Include="CLoginDlg.cpp" />
-    <ClCompile Include="CRegisterDlg.cpp" />
+    <ClCompile Include="CRegisterDlg.cpp" />
     <ClCompile Include="KetNoi.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -221,6 +221,11 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\Client.ico" />
+    <Image Include="res\hb-icon-icon.ico" />
+    <Image Include="res\icon1.ico" />
+    <Image Include="res\man.ico" />
+    <Image Include="res\pingus-icon-icon.ico" />
+    <Image Include="res\red-matreshka-inside-icon-icon.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

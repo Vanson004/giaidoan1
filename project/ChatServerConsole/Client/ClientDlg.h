@@ -1,7 +1,6 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <queue>
 #include <richedit.h>
 using namespace std;
 
@@ -37,6 +36,9 @@ public:
     CChatClientDlg(CWnd* pParent = nullptr);
     virtual ~CChatClientDlg();
 
+    virtual BOOL PreTranslateMessage(MSG* pMsg);
+    void enterSend();
+
 #ifdef AFX_DESIGN_TIME
     enum { IDD = IDD_CLIENT_DIALOG };
 #endif
@@ -50,24 +52,22 @@ protected:
 protected:
     HICON m_hIcon;
     CRichEditCtrl m_richChat;
-    CListBox m_listOnline;
+    CListCtrl m_listOnline;
+    CImageList m_imageList;
     CEdit m_editMessage;
     CString m_strSelectedFriend;
     HANDLE m_hRecvThread;
     DWORD m_dwRecvThreadId;
     volatile LONG m_bRunning;
-    queue<TinNhan> m_queueTin;
-    queue<TrangThaiUser> m_queueTrangThai;
-    queue<LichSuChat> m_queueLichSu;
-    queue<ThongBaoDaXem> m_queueDaXem;
-    CRITICAL_SECTION m_csQueue;
     static DWORD WINAPI RecvThreadProc(LPVOID lpParam);
     void RecvThreadFunc();
     bool sendMessage(const string& receiver, const string& content);
     void loadLichSu(const CString& strFriend);
     void hienThiTin(const CString& sender, const CString& content, const CString& time, int isRead = 0);
-    void themDongChat(const CString& text, COLORREF color, bool bBold, WORD alignment);
+    void themDongChat(const CString& text, COLORREF color, bool bBold, WORD alignment, int fontSize = 200);
     void updateDanhSachBan(const CString& user, bool bOnline);
+    int layIconUser(const CString& username);
+    void chonBan(int nIndex);
 
     virtual BOOL OnInitDialog();
     afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
@@ -80,7 +80,7 @@ protected:
     afx_msg LRESULT OnUserStatus(WPARAM wParam, LPARAM lParam);
     afx_msg LRESULT OnReceiveHistory(WPARAM wParam, LPARAM lParam);
     afx_msg LRESULT OnMessageStatus(WPARAM wParam, LPARAM lParam);
-    afx_msg void OnSelectFriend();
+    afx_msg void OnNMClickListFriends(NMHDR *pNMHDR, LRESULT *pResult);
 
     DECLARE_MESSAGE_MAP()
 };

@@ -59,9 +59,9 @@
     <ClCompile Include="CLoginDlg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="KetNoi.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+    <ClCompile Include="KetNoi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="CRegisterDlg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -78,6 +78,21 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\Client.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\icon1.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\hb-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\pingus-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\red-matreshka-inside-icon-icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\man.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
