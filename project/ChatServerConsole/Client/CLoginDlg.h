@@ -17,16 +17,12 @@ protected:
 
 public:
     HICON m_hIcon;
-    bool m_bConnected;
-    CEdit m_editIP;
-    CEdit m_editPort;
     CEdit m_editLoginUser;
     CEdit m_editLoginPass;
     SOCKET  m_hSocket;         
     CString m_strUsername;    
     bool m_bLoginSuccess = false;
     virtual BOOL OnInitDialog();
-    afx_msg void OnBnClickedButtonConnect();
     afx_msg void OnBnClickedButtonLogin();
     afx_msg void OnBnClickedButtonGoRegister();
 };

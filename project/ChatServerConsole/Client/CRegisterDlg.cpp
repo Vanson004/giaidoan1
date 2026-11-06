@@ -82,8 +82,8 @@ void CRegisterDlg::OnBnClickedButtonDoRegister()
         return;
     }
     if (m_strIP.IsEmpty() || m_strPort.IsEmpty()) {
-        AfxMessageBox(_T("Thieu thong tin IP/Port Server"));
-        return;
+        m_strIP = _T(SERVER_DEFAULT_IP);
+        m_strPort.Format(_T("%d"), SERVER_DEFAULT_PORT);
     }
     int port = _ttoi(m_strPort);
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
