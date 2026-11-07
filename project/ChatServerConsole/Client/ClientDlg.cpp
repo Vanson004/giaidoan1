@@ -93,22 +93,6 @@ HCURSOR CChatClientDlg::OnQueryDragIcon()
     return static_cast<HCURSOR>(m_hIcon);
 }
 
-BOOL CChatClientDlg::PreTranslateMessage(MSG* pMsg)
-{
-    if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN) {
-        if (GetFocus() == &m_editMessage) {
-            enterSend();
-            return TRUE;
-        }
-    }
-    return CDialogEx::PreTranslateMessage(pMsg);
-}
-
-void CChatClientDlg::enterSend()
-{
-    OnBnClickedButtonSend();
-}
-
 BOOL CChatClientDlg::OnInitDialog()
 {
     CDialogEx::OnInitDialog();
@@ -174,6 +158,22 @@ BOOL CChatClientDlg::OnInitDialog()
     return TRUE;
 }
 
+BOOL CChatClientDlg::PreTranslateMessage(MSG* pMsg)
+{
+    if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN) {
+        if (GetFocus() == &m_editMessage) {
+            enterSend();
+            return TRUE;
+        }
+    }
+    return CDialogEx::PreTranslateMessage(pMsg);
+}
+
+void CChatClientDlg::enterSend()
+{
+    OnBnClickedButtonSend();
+}
+
 DWORD WINAPI CChatClientDlg::RecvThreadProc(LPVOID lpParam)
 {
     CChatClientDlg* pDlg = reinterpret_cast<CChatClientDlg*>(lpParam);
@@ -202,15 +202,14 @@ void CChatClientDlg::RecvThreadFunc()
             continue;
         }
         if (action == ACTION_CHAT) {
-            string status = resJson.value("status", "");
-            if (status == RES_SUCCESS || status == RES_FAIL) {
-                continue;
-            }
             string sender = resJson.value("sender", "");
             string receiver = resJson.value("receiver", "");
             string content = resJson.value("content", "");
             string timeStr = resJson.value("time", "");
-            int isRead = resJson.value("isRead", 0);
+            int isRead = 0;
+            if (resJson.contains("isRead")) {
+                isRead = resJson["isRead"].get<int>();
+            }
             if (!sender.empty() && !content.empty()) {
                 TinNhan* pMsg = new TinNhan();
                 pMsg->sender = KetNoi::toCString(sender);
@@ -264,7 +263,9 @@ void CChatClientDlg::RecvThreadFunc()
                         m.receiver = KetNoi::toCString(item.value("receiver", ""));
                         m.content = KetNoi::toCString(item.value("content", ""));
                         m.time = KetNoi::toCString(item.value("time", ""));
-                        m.daXem = item.value("isRead", 0);
+                        if (item.contains("isRead")) {
+                            m.daXem = item["isRead"].get<int>();
+                        }
                         pEvt->dsTinNhan.push_back(m);
                     }
                 }
@@ -282,14 +283,10 @@ LRESULT CChatClientDlg::OnReceiveMessage(WPARAM, LPARAM lParam)
 {
     TinNhan* pMsg = reinterpret_cast<TinNhan*>(lParam);
     if (!pMsg) return 0;
-
-    if (m_strSelectedFriend.CompareNoCase(pMsg->sender) == 0 || m_strSelectedFriend.CompareNoCase(pMsg->receiver) == 0) {
-        if (m_strSelectedFriend.CompareNoCase(pMsg->sender) == 0) {
-            loadLichSu(m_strSelectedFriend);
-        } else {
-            hienThiTin(pMsg->sender, pMsg->content, pMsg->time, pMsg->daXem);
-        }
+    if (m_strSelectedFriend.CompareNoCase(pMsg->sender) == 0) {
+        loadLichSu(m_strSelectedFriend);
     }
+
     delete pMsg;
     return 0;
 }
@@ -365,11 +362,10 @@ void CChatClientDlg::chonBan(int nIndex)
     int spacePos = strItem.Find(_T(' '));
     CString friendName = (spacePos != -1) ? strItem.Left(spacePos) : strItem;
     friendName.Trim();
-    if (friendName.IsEmpty() || friendName.CompareNoCase(m_strCurrentUsername) == 0) {
+    if (friendName.IsEmpty()) {
         return;
     }
     if (m_strSelectedFriend.CompareNoCase(friendName) == 0) {
-        loadLichSu(m_strSelectedFriend);
         m_editMessage.SetFocus();
         return;
     }
@@ -457,41 +453,39 @@ void CChatClientDlg::hienThiTin(const CString& sender, const CString& content, c
     if (spaceIndex != -1) {
         shortTime = shortTime.Mid(spaceIndex + 1);
     }
+
     if (sender.CompareNoCase(m_strCurrentUsername) == 0) {
-        CString header = _T("Ban");
-        if (!shortTime.IsEmpty()) {
-            if (isRead == 1) {
-                header.Format(_T("Ban (%s) (Da xem)"), static_cast<LPCTSTR>(shortTime));
-            } else {
-                header.Format(_T("Ban (%s) (Da nhan)"), static_cast<LPCTSTR>(shortTime));
-            }
+        // Tin nhắn của mình gửi đi (Căn phải phong cách hiện đại)
+        themDongChat(content, RGB(25, 25, 25), false, PFA_RIGHT, 210);
+
+        CString subInfo = shortTime;
+        if (isRead == 1) {
+            subInfo = shortTime.IsEmpty() ? _T("Da xem") : shortTime + _T("  Da xem");
+            themDongChat(subInfo, RGB(0, 120, 215), false, PFA_RIGHT, 150);
+        } else {
+            subInfo = shortTime.IsEmpty() ? _T("Da nhan") : shortTime + _T("  Da nhan");
+            themDongChat(subInfo, RGB(130, 130, 130), false, PFA_RIGHT, 150);
         }
-        themDongChat(header, RGB(0, 102, 204), true, PFA_RIGHT, 180);
-        themDongChat(content, RGB(30, 30, 30), false, PFA_RIGHT, 210);
         themDongChat(_T(""), RGB(0, 0, 0), false, PFA_RIGHT, 80);
     } else {
-        CString header = sender;
+        // Tin nhắn của bạn bè gửi đến (Căn trái phong cách hiện đại)
+        themDongChat(sender, RGB(0, 102, 204), true, PFA_LEFT, 180);
+        themDongChat(content, RGB(25, 25, 25), false, PFA_LEFT, 210);
         if (!shortTime.IsEmpty()) {
-            header.Format(_T("%s (%s)"), static_cast<LPCTSTR>(sender), static_cast<LPCTSTR>(shortTime));
+            themDongChat(shortTime, RGB(130, 130, 130), false, PFA_LEFT, 150);
         }
-        themDongChat(header, RGB(204, 0, 0), true, PFA_LEFT, 180);
-        themDongChat(content, RGB(30, 30, 30), false, PFA_LEFT, 210);
         themDongChat(_T(""), RGB(0, 0, 0), false, PFA_LEFT, 80);
     }
 }
 
 int CChatClientDlg::layIconUser(const CString& username)
 {
-    if (username.CompareNoCase(_T("user1")) == 0 || username.CompareNoCase(_T("userA")) == 0) return 0;
-    if (username.CompareNoCase(_T("user2")) == 0 || username.CompareNoCase(_T("userB")) == 0) return 1;
-    if (username.CompareNoCase(_T("user3")) == 0 || username.CompareNoCase(_T("userC")) == 0) return 2;
-    if (username.CompareNoCase(_T("user4")) == 0 || username.CompareNoCase(_T("userD")) == 0) return 3;
-
-    if (!username.IsEmpty()) {
-        int code = (int)username[0];
-        return abs(code) % 4;
+    if (username.IsEmpty()) return 0;
+    int sum = 0;
+    for (int i = 0; i < username.GetLength(); i++) {
+        sum += static_cast<int>(towlower(username[i]));
     }
-    return 0;
+    return abs(sum) % 4;
 }
 
 void CChatClientDlg::updateDanhSachBan(const CString& user, bool bOnline)

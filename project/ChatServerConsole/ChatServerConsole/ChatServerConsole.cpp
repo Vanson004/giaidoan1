@@ -220,14 +220,7 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
             string receiver = reqJson.value("receiver", "");
             string content = reqJson.value("content", "");
             string timeStr = reqJson.value("time", "");
-
             if (sender.empty() || receiver.empty() || content.empty()) {
-                json res = {
-                    {"status", RES_FAIL},
-                    {"action", "CHAT"},
-                    {"reason", "missing_fields"}
-                };
-                sendPacket(clientSocket, ACTION_CHAT, res.dump());
                 continue;
             }
             SOCKET recvSocket = FindOnlineSocket(receiver);
@@ -244,13 +237,6 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
                 };
                 sendPacket(recvSocket, ACTION_CHAT, msgJson.dump());
             }
-
-            json res = {
-                {"status", RES_SUCCESS},
-                {"action", "CHAT"},
-                {"isRead", 0}
-            };
-            sendPacket(clientSocket, ACTION_CHAT, res.dump());
         }
         else if (hdr.action == ACTION_GET_HISTORY) {
             string user1 = reqJson.value("user1", "");
@@ -289,7 +275,6 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
                     {"isRead", m.isRead}
                 });
             }
-
             json res = {
                 {"status", RES_SUCCESS},
                 {"action", "GET_HISTORY"},

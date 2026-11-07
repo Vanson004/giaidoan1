@@ -9,19 +9,16 @@ struct TinNhan {
     CString receiver;
     CString content;
     CString time;
-    int daXem;
+    int daXem = 0;
 };
-
 struct TrangThaiUser {
     CString username;
     bool isOnline;
 };
-
 struct LichSuChat {
     CString friendName;
     vector<TinNhan> dsTinNhan;
 };
-
 struct ThongBaoDaXem {
     CString nguoiXem;
 };

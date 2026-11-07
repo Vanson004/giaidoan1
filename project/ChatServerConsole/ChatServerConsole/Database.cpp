@@ -186,7 +186,7 @@ vector<HistoryMessage> Database::getChatHistory(const string& user1, const strin
     if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) return history;
     sqlite3_busy_timeout(db, 5000);
 
-    const char* query = "SELECT SenderUsername, ReceiverUsername, Content, Timestamp, IsRead FROM Messages "
+    const char* query = "SELECT SenderUsername, ReceiverUsername, Content, datetime(Timestamp, 'localtime'), IsRead FROM Messages "
         "WHERE (SenderUsername = ? AND ReceiverUsername = ?) "
         "OR (SenderUsername = ? AND ReceiverUsername = ?) "
         "ORDER BY Id ASC;";
