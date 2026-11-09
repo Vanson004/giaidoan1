@@ -2,7 +2,6 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -14,30 +13,23 @@
 #include "nlohmann/json.hpp"
 #include "Protocol.h"
 #include "Database.h"
-
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "ws2_32.lib")
-
 using namespace std;
 using json = nlohmann::json;
-
 #define SVCNAME TEXT("ChatServerService")
 #define SVC_ERROR ((DWORD)0xC0000001L)
-
 static SERVICE_STATUS gSvcStatus;
 static SERVICE_STATUS_HANDLE gSvcStatusHandle;
 static HANDLE ghSvcStopEvent = NULL;
-
 static SOCKET g_listenSocket = INVALID_SOCKET;
 static unordered_map<string, SOCKET> g_onlineUsers;
 static CRITICAL_SECTION g_csOnline;
-
 VOID WINAPI SvcCtrlHandler(DWORD);
 VOID WINAPI SvcMain(DWORD, LPTSTR*);
 VOID ReportSvcStatus(DWORD, DWORD, DWORD);
 VOID SvcInit(DWORD, LPTSTR*);
 VOID SvcReportEvent(LPTSTR);
-
 static DWORD WINAPI TcpServerWorkerThread(LPVOID lpParam);
 static DWORD WINAPI HandleClientProc(LPVOID lpParam);
 
@@ -80,9 +72,7 @@ static bool sendPacket(SOCKET s, uint32_t action, const string& jsonStr) {
     PacketHeader hdr;
     hdr.action = action;
     hdr.dataSize = (uint32_t)jsonStr.size();
-
     if (send(s, (const char*)&hdr, sizeof(hdr), 0) == SOCKET_ERROR) return false;
-
     if (hdr.dataSize > 0) {
         if (send(s, jsonStr.c_str(), (int)jsonStr.size(), 0) == SOCKET_ERROR) return false;
     }
@@ -95,14 +85,17 @@ static void ThongBaoUserStatus(const string& username, const string& status, SOC
         {"status", status}
     };
     string payload = bcast.dump();
-
+    vector<SOCKET> targetSockets;
     EnterCriticalSection(&g_csOnline);
     for (const auto& kv : g_onlineUsers) {
         if (kv.second != excludeSocket) {
-            sendPacket(kv.second, ACTION_USER_STATUS, payload);
+            targetSockets.push_back(kv.second);
         }
     }
     LeaveCriticalSection(&g_csOnline);
+    for (SOCKET s : targetSockets) {
+        sendPacket(s, ACTION_USER_STATUS, payload);
+    }
 }
 
 static DWORD WINAPI HandleClientProc(LPVOID lpParam)
@@ -110,23 +103,21 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
     ClientThreadParam* pParam = reinterpret_cast<ClientThreadParam*>(lpParam);
     SOCKET clientSocket = pParam->clientSocket;
     delete pParam;
-
     string loggedInUser = "";
-
     while (true) {
         if (ghSvcStopEvent != NULL && WaitForSingleObject(ghSvcStopEvent, 0) == WAIT_OBJECT_0) {
             break;
         }
-
         PacketHeader hdr{};
         if (!receiveData(clientSocket, (char*)&hdr, sizeof(hdr))) {
             break;
         }
-
-        if (hdr.dataSize == 0 || hdr.dataSize > 1024 * 1024) {
+        if (hdr.dataSize > 1024 * 1024) {
             break;
         }
-
+        if (hdr.dataSize == 0) {
+            continue;
+        }
         vector<char> buf(hdr.dataSize + 1, 0);
         if (!receiveData(clientSocket, buf.data(), (int)hdr.dataSize)) {
             break;
@@ -140,11 +131,9 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
         } catch (...) {
             continue;
         }
-
         if (hdr.action == ACTION_REGISTER) {
             string username = reqJson.value("username", "");
             string password = reqJson.value("password", "");
-
             if (username.empty() || password.empty()) {
                 json res = {
                     {"status", RES_FAIL},
@@ -154,16 +143,13 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
                 sendPacket(clientSocket, ACTION_REGISTER, res.dump());
                 continue;
             }
-
             bool ok = Database::registerUser(username, password);
             string statusStr = ok ? RES_SUCCESS : RES_FAIL;
-
             json res = {
                 {"status", statusStr},
                 {"action", "REGISTER"}
             };
             sendPacket(clientSocket, ACTION_REGISTER, res.dump());
-
             if (ok) {
                 ThongBaoUserStatus(username, "offline");
             }
@@ -171,7 +157,6 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
         else if (hdr.action == ACTION_LOGIN) {
             string username = reqJson.value("username", "");
             string password = reqJson.value("password", "");
-
             if (username.empty() || password.empty()) {
                 json res = {
                     {"status", RES_FAIL},
@@ -181,30 +166,30 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
                 sendPacket(clientSocket, ACTION_LOGIN, res.dump());
                 continue;
             }
-
             bool ok = Database::loginUser(username, password);
             if (ok) {
                 loggedInUser = username;
                 RegisterOnline(username, clientSocket);
-
                 json res = {
                     {"status", RES_SUCCESS},
                     {"action", "LOGIN"},
                     {"username", username}
                 };
                 sendPacket(clientSocket, ACTION_LOGIN, res.dump());
-
                 vector<string> allUsers = Database::getAllUsers();
+                unordered_map<string, SOCKET> danhSachOnlSaoChep;
+                EnterCriticalSection(&g_csOnline);
+                danhSachOnlSaoChep = g_onlineUsers;
+                LeaveCriticalSection(&g_csOnline);
                 for (const string& u : allUsers) {
                     if (u == username) continue;
-                    bool isOnline = (FindOnlineSocket(u) != INVALID_SOCKET);
+                    bool isOnline = (danhSachOnlSaoChep.find(u) != danhSachOnlSaoChep.end());
                     json statusJson = {
                         {"user", u},
                         {"status", isOnline ? "online" : "offline"}
                     };
                     sendPacket(clientSocket, ACTION_USER_STATUS, statusJson.dump());
                 }
-
                 ThongBaoUserStatus(username, "online", clientSocket);
             } else {
                 json res = {
@@ -223,10 +208,19 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
             if (sender.empty() || receiver.empty() || content.empty()) {
                 continue;
             }
+            bool chiKhoangTrang = true;
+            for (char ch : content) {
+                if (!isspace((unsigned char)ch)) {
+                    chiKhoangTrang = false;
+                    break;
+                }
+            }
+            if (chiKhoangTrang) {
+                continue;
+            }
             SOCKET recvSocket = FindOnlineSocket(receiver);
             bool isOnline = (recvSocket != INVALID_SOCKET);
             Database::saveMessage(sender, receiver, content, 0);
-
             if (isOnline) {
                 json msgJson = {
                     {"sender", sender},
@@ -241,7 +235,6 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
         else if (hdr.action == ACTION_GET_HISTORY) {
             string user1 = reqJson.value("user1", "");
             string user2 = reqJson.value("user2", "");
-
             if (user1.empty() || user2.empty()) {
                 json res = {
                     {"status", RES_FAIL},
@@ -251,7 +244,6 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
                 sendPacket(clientSocket, ACTION_GET_HISTORY, res.dump());
                 continue;
             }
-
             int updatedCount = Database::updateMessagesIsRead(user1, user2);
             if (updatedCount > 0) {
                 SOCKET senderSocket = FindOnlineSocket(user2);
@@ -263,7 +255,6 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
                     sendPacket(senderSocket, ACTION_MSG_READ, readNotif.dump());
                 }
             }
-
             vector<HistoryMessage> msgs = Database::getChatHistory(user1, user2);
             json msgList = json::array();
             for (const auto& m : msgs) {
@@ -289,7 +280,6 @@ static DWORD WINAPI HandleClientProc(LPVOID lpParam)
         UnregisterOnline(loggedInUser);
         ThongBaoUserStatus(loggedInUser, "offline");
     }
-
     closesocket(clientSocket);
     return 0;
 }
@@ -317,7 +307,7 @@ static DWORD WINAPI TcpServerWorkerThread(LPVOID lpParam)
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(9999);
+    serverAddr.sin_port = htons((u_short)SERVER_DEFAULT_PORT);
 
     if (::bind(g_listenSocket, (SOCKADDR*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         SvcReportEvent((LPTSTR)TEXT("bind"));

@@ -34,7 +34,6 @@ public:
     virtual ~CChatClientDlg();
 
     virtual BOOL PreTranslateMessage(MSG* pMsg);
-    void enterSend();
 
 #ifdef AFX_DESIGN_TIME
     enum { IDD = IDD_CLIENT_DIALOG };
@@ -49,16 +48,15 @@ protected:
 protected:
     HICON m_hIcon;
     CRichEditCtrl m_richChat;
-    CListCtrl m_listOnline;
+    CListCtrl m_listFriends;
     CImageList m_imageList;
     CEdit m_editMessage;
     CString m_strSelectedFriend;
     HANDLE m_hRecvThread;
-    DWORD m_dwRecvThreadId;
     volatile LONG m_bRunning;
     static DWORD WINAPI RecvThreadProc(LPVOID lpParam);
     void RecvThreadFunc();
-    bool sendMessage(const string& receiver, const string& content);
+    bool sendMessage(const string& receiver, const string& content, const string& timeStr);
     void loadLichSu(const CString& strFriend);
     void hienThiTin(const CString& sender, const CString& content, const CString& time, int isRead = 0);
     void themDongChat(const CString& text, COLORREF color, bool bBold, WORD alignment, int fontSize = 200);

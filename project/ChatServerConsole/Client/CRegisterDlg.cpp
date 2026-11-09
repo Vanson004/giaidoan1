@@ -6,22 +6,18 @@
 #include <regex>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-
 #pragma comment(lib, "ws2_32.lib")
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-
 using namespace std;
 using json = nlohmann::json;
 
 IMPLEMENT_DYNAMIC(CRegisterDlg, CDialogEx)
 
 CRegisterDlg::CRegisterDlg(CWnd* pParent /*=nullptr*/)
-    : CDialogEx(IDD_DIALOG_REGISTER, pParent),
-      m_strIP(_T("127.0.0.1")),
-      m_strPort(_T("9999"))
+    : CDialogEx(IDD_DIALOG_REGISTER, pParent)
 {
 }
 
@@ -44,11 +40,6 @@ END_MESSAGE_MAP()
 BOOL CRegisterDlg::OnInitDialog()
 {
     CDialogEx::OnInitDialog();
-    WSADATA wsaData{};
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        AfxMessageBox(_T("Khoi tao winsock that bai"));
-        return FALSE;
-    }
     return TRUE;
 }
 
@@ -81,11 +72,6 @@ void CRegisterDlg::OnBnClickedButtonDoRegister()
         m_editRegisterConfirm.SetFocus();
         return;
     }
-    if (m_strIP.IsEmpty() || m_strPort.IsEmpty()) {
-        m_strIP = _T(SERVER_DEFAULT_IP);
-        m_strPort.Format(_T("%d"), SERVER_DEFAULT_PORT);
-    }
-    int port = _ttoi(m_strPort);
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s == INVALID_SOCKET) {
         AfxMessageBox(_T("Tao socket that bai"), MB_ICONERROR);
@@ -94,12 +80,10 @@ void CRegisterDlg::OnBnClickedButtonDoRegister()
     DWORD timeout = 5000;
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
     setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-
-    string ip = KetNoi::toUtf8(m_strIP);
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons((u_short)port);
-    if (inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr) != 1) {
+    serverAddr.sin_port = htons((u_short)SERVER_DEFAULT_PORT);
+    if (inet_pton(AF_INET, SERVER_DEFAULT_IP, &serverAddr.sin_addr) != 1) {
         AfxMessageBox(_T("Dia chi IP khong hop le"), MB_ICONERROR);
         closesocket(s);
         return;

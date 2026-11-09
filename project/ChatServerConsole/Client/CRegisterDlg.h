@@ -15,8 +15,6 @@ protected:
     virtual void DoDataExchange(CDataExchange* pDX);
     DECLARE_MESSAGE_MAP()
 public:
-    CString m_strIP;
-    CString m_strPort;
     CEdit m_editRegisterUser;
     CEdit m_editRegisterPass;
     CEdit m_editRegisterConfirm;

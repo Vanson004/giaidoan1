@@ -21,7 +21,7 @@ public:
     CEdit m_editLoginPass;
     SOCKET  m_hSocket;         
     CString m_strUsername;    
-    bool m_bLoginSuccess = false;
+    bool m_bLoginSuccess;
     virtual BOOL OnInitDialog();
     afx_msg void OnBnClickedButtonLogin();
     afx_msg void OnBnClickedButtonGoRegister();

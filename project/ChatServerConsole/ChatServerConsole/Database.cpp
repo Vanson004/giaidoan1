@@ -8,17 +8,13 @@ using namespace std;
 static CRITICAL_SECTION g_csDB;
 static bool g_bDbCsInit = false;
 
-static void EnsureDBCS() {
-    if (!g_bDbCsInit) {
-        InitializeCriticalSection(&g_csDB);
-        g_bDbCsInit = true;
-    }
-}
-
 class AutoDBLock {
 public:
     AutoDBLock() {
-        EnsureDBCS();
+        if (!g_bDbCsInit) {
+            InitializeCriticalSection(&g_csDB);
+            g_bDbCsInit = true;
+        }
         EnterCriticalSection(&g_csDB);
     }
     ~AutoDBLock() {
@@ -29,27 +25,25 @@ public:
 static string GetDBPath() {
     static string cachedPath;
     if (!cachedPath.empty()) return cachedPath;
-    wchar_t exePath[MAX_PATH] = {0};
-    GetModuleFileNameW(NULL, exePath, MAX_PATH);
-    wstring path(exePath);
-    size_t pos = path.find_last_of(L"\\/");
-    if (pos != wstring::npos) path = path.substr(0, pos);
-
+    if (GetFileAttributesA("D:\\ProjectCMC\\chat_app.db") != INVALID_FILE_ATTRIBUTES) {
+        cachedPath = "D:\\ProjectCMC\\chat_app.db";
+        return cachedPath;
+    }
+    char path[MAX_PATH] = { 0 };
+    GetModuleFileNameA(NULL, path, MAX_PATH);
+    string dir(path);
     while (true) {
-        size_t lastSlash = path.find_last_of(L"\\/");
-        if (lastSlash == wstring::npos) break;
-        wstring folder = path.substr(lastSlash + 1);
-        if (_wcsicmp(folder.c_str(), L"Debug") == 0 || _wcsicmp(folder.c_str(), L"Release") == 0 || _wcsicmp(folder.c_str(), L"Win32") == 0 ||
-            _wcsicmp(folder.c_str(), L"x64") == 0 ||_wcsicmp(folder.c_str(), L"ChatServerConsole") == 0) {
-            path = path.substr(0, lastSlash);
-        } else {
-            break;
+        size_t pos = dir.find_last_of("\\/");
+        if (pos == string::npos) break;
+        dir = dir.substr(0, pos);
+
+        string candidate = dir + "\\chat_app.db";
+        if (GetFileAttributesA(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            cachedPath = candidate;
+            return cachedPath;
         }
     }
-    path += L"\\chat_app.db";
-    int sz = WideCharToMultiByte(CP_UTF8,0,path.data(),(int)path.size(),NULL,0,NULL,NULL);
-    cachedPath.resize(sz);
-    WideCharToMultiByte(CP_UTF8,0,path.data(), (int)path.size(), &cachedPath[0], sz, NULL, NULL);
+    cachedPath = "D:\\ProjectCMC\\chat_app.db";
     return cachedPath;
 }
 
@@ -57,7 +51,6 @@ bool Database::initDB() {
     AutoDBLock lock;
     sqlite3* db = nullptr;
     char* errMsg = nullptr;
-
     string dbPath = GetDBPath();
     if (sqlite3_open(dbPath.c_str(), &db) != SQLITE_OK) {
         sqlite3_close(db);
@@ -96,7 +89,10 @@ bool Database::registerUser(const string& username, const string& password) {
     AutoDBLock lock;
     sqlite3* db = nullptr;
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) return false;
+    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
     sqlite3_busy_timeout(db, 5000);
 
     string hashedPass = Security::hashPassword(password);
@@ -117,7 +113,10 @@ bool Database::loginUser(const string& username, const string& password) {
     AutoDBLock lock;
     sqlite3* db = nullptr;
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) return false;
+    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
     sqlite3_busy_timeout(db, 5000);
 
     string hashedPass = Security::hashPassword(password);
@@ -138,7 +137,10 @@ bool Database::saveMessage(const string& sender, const string& receiver, const s
     AutoDBLock lock;
     sqlite3* db = nullptr;
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) return false;
+    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
     sqlite3_busy_timeout(db, 5000);
 
     const char* query = "INSERT INTO Messages (SenderUsername,ReceiverUsername,Content,IsRead) VALUES (?,?,?,?);";
@@ -159,7 +161,10 @@ bool Database::saveMessage(const string& sender, const string& receiver, const s
 int Database::updateMessagesIsRead(const string& reader, const string& sender) {
     AutoDBLock lock;
     sqlite3* db = nullptr;
-    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) return 0;
+    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return 0;
+    }
     sqlite3_busy_timeout(db, 5000);
 
     int changes = 0;
@@ -183,14 +188,15 @@ vector<HistoryMessage> Database::getChatHistory(const string& user1, const strin
     sqlite3* db = nullptr;
     sqlite3_stmt* stmt = nullptr;
 
-    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) return history;
+    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return history;
+    }
     sqlite3_busy_timeout(db, 5000);
-
     const char* query = "SELECT SenderUsername, ReceiverUsername, Content, datetime(Timestamp, 'localtime'), IsRead FROM Messages "
         "WHERE (SenderUsername = ? AND ReceiverUsername = ?) "
         "OR (SenderUsername = ? AND ReceiverUsername = ?) "
         "ORDER BY Id ASC;";
-
     if (sqlite3_prepare_v2(db, query, -1, &stmt, 0) == SQLITE_OK) {
         sqlite3_bind_text(stmt,1,user1.c_str(),-1, SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt,2,user2.c_str(),-1, SQLITE_TRANSIENT);
@@ -220,7 +226,10 @@ vector<string> Database::getAllUsers() {
     vector<string> users;
     sqlite3* db = nullptr;
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) return users;
+    if (sqlite3_open(GetDBPath().c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return users;
+    }
     sqlite3_busy_timeout(db, 5000);
     const char* query = "SELECT Username FROM Users ORDER BY Username ASC;";
     if (sqlite3_prepare_v2(db, query, -1, &stmt, 0) == SQLITE_OK) {

@@ -3,7 +3,6 @@
 #include "Client.h"
 #include "ClientDlg.h"
 #include "CLoginDlg.h"
-#include "CRegisterDlg.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -44,7 +43,7 @@ BOOL CClientApp::InitInstance()
         MSG msg;
         while (::PeekMessage(&msg, NULL, WM_QUIT, WM_QUIT, PM_REMOVE)) {}
         CChatClientDlg chatDlg;
-        chatDlg.m_hSocket            = loginDlg.m_hSocket;
+        chatDlg.m_hSocket = loginDlg.m_hSocket;
         chatDlg.m_strCurrentUsername = loginDlg.m_strUsername;
         loginDlg.m_hSocket = INVALID_SOCKET;
         m_pMainWnd = &chatDlg;

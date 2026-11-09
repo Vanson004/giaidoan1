@@ -15,11 +15,8 @@
 #define IDI_ICON_User4                  138
 #define IDC_EDIT_LOGIN_USER             1000
 #define IDC_EDIT_LOGIN_PASS             1001
-#define IDC_BUTTON_CONNECT              1002
-#define IDC_EDIT_IP                     1004
 #define IDC_BUTTON_LOGIN                1005
 #define IDC_BUTTON_DO_REGISTER          1006
-#define IDC_EDIT_PORT                   1007
 #define IDC_EDIT_REG_USER               1008
 #define IDC_EDIT_REG_PASS               1009
 #define IDC_EDIT_REG_CONFIRM            1010
@@ -28,8 +25,6 @@
 #define IDC_LIST_CHAT                   1014
 #define IDC_EDIT_MESSAGES               1015
 #define IDC_BUTTON_SEND                 1016
-#define IDC_EDIT_RECEIVER               1017
-#define IDC_RICHEDIT21                  1018
 
 // Next default values for new objects
 // 

@@ -4,8 +4,6 @@
 #include "afxdialogex.h"
 #include "CRegisterDlg.h"
 #include "KetNoi.h"
-#include "ClientDlg.h"
-#include "Protocol.h"
 #include <regex>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -77,7 +75,6 @@ void CLoginDlg::OnBnClickedButtonLogin()
         else m_editLoginPass.SetFocus();
         return;
     }
-
     string userStr = KetNoi::toUtf8(strUser);
     regex userRegex("^[a-zA-Z0-9_]{1,100}$");
     if (!regex_match(userStr, userRegex)) {
@@ -89,17 +86,13 @@ void CLoginDlg::OnBnClickedButtonLogin()
         closesocket(m_hSocket);
         m_hSocket = INVALID_SOCKET;
     }
-
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s == INVALID_SOCKET) {
         AfxMessageBox(_T("Tao socket that bai"), MB_ICONERROR);
         return;
     }
-
     DWORD timeout = 5000;
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
     setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons((u_short)SERVER_DEFAULT_PORT);
@@ -108,16 +101,12 @@ void CLoginDlg::OnBnClickedButtonLogin()
         closesocket(s);
         return;
     }
-
     if (connect(s, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        CString msg;
-        msg.Format(_T("Khong the ket noi toi Server"), SERVER_DEFAULT_PORT);
-        AfxMessageBox(msg, MB_ICONERROR);
+        AfxMessageBox(_T("Khong the ket noi toi Server"), MB_ICONERROR);
         closesocket(s);
         return;
     }
     m_hSocket = s;
-
     string passStr = KetNoi::toUtf8(strPass);
     json reqJson = {{"username", userStr}, {"password", passStr}};
     string dataGui = reqJson.dump();
@@ -130,7 +119,6 @@ void CLoginDlg::OnBnClickedButtonLogin()
 
     DWORD timeoutWait = 10000;
     setsockopt(m_hSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeoutWait, sizeof(timeoutWait));
-
     uint32_t actionNhan = 0;
     string jsonNhan;
     if (!KetNoi::receivePacket(m_hSocket, actionNhan, jsonNhan)) {
@@ -139,7 +127,6 @@ void CLoginDlg::OnBnClickedButtonLogin()
         m_hSocket = INVALID_SOCKET;
         return;
     }
-
     json ketQua;
     try {
         ketQua = json::parse(jsonNhan);
@@ -149,7 +136,6 @@ void CLoginDlg::OnBnClickedButtonLogin()
         m_hSocket = INVALID_SOCKET;
         return;
     }
-
     string status = ketQua.value("status", "");
     if (status == RES_SUCCESS) {
         DWORD noTimeout = 0;
@@ -170,7 +156,5 @@ void CLoginDlg::OnBnClickedButtonLogin()
 void CLoginDlg::OnBnClickedButtonGoRegister()
 {
     CRegisterDlg registerDlg;
-    registerDlg.m_strIP = _T(SERVER_DEFAULT_IP);
-    registerDlg.m_strPort.Format(_T("%d"), SERVER_DEFAULT_PORT);
     registerDlg.DoModal();
 }

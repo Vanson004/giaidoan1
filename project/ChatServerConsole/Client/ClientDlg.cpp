@@ -31,7 +31,6 @@ CChatClientDlg::CChatClientDlg(CWnd* pParent /*=nullptr*/)
     : CDialogEx(IDD_CLIENT_DIALOG, pParent),
       m_hSocket(INVALID_SOCKET),
       m_hRecvThread(NULL),
-      m_dwRecvThreadId(0),
       m_bRunning(0)
 {
     m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
@@ -45,7 +44,7 @@ void CChatClientDlg::DoDataExchange(CDataExchange* pDX)
 {
     CDialogEx::DoDataExchange(pDX);
     DDX_Control(pDX, IDC_LIST_CHAT, m_richChat);
-    DDX_Control(pDX, IDC_LIST_FRIENDS, m_listOnline);
+    DDX_Control(pDX, IDC_LIST_FRIENDS, m_listFriends);
     DDX_Control(pDX, IDC_EDIT_MESSAGES, m_editMessage);
 }
 
@@ -122,7 +121,6 @@ BOOL CChatClientDlg::OnInitDialog()
 
     m_richChat.SetBackgroundColor(FALSE, RGB(255, 255, 255));
     m_richChat.SetReadOnly(TRUE);
-    m_richChat.SetEventMask(m_richChat.GetEventMask() | ENM_SELCHANGE | ENM_MOUSEEVENTS);
     m_richChat.SendMessage(EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(10, 15));
 
     m_imageList.Create(20, 20, ILC_COLOR32 | ILC_MASK, 4, 4);
@@ -136,19 +134,19 @@ BOOL CChatClientDlg::OnInitDialog()
         }
     }
 
-    m_listOnline.SetImageList(&m_imageList, LVSIL_SMALL);
-    m_listOnline.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    m_listFriends.SetImageList(&m_imageList, LVSIL_SMALL);
+    m_listFriends.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
     CRect rcList;
-    m_listOnline.GetClientRect(&rcList);
+    m_listFriends.GetClientRect(&rcList);
     int colWidth = (rcList.Width() > 0) ? (rcList.Width() - 4) : 120;
-    m_listOnline.InsertColumn(0, _T("Friends"), LVCFMT_LEFT, colWidth);
+    m_listFriends.InsertColumn(0, _T("Friends"), LVCFMT_LEFT, colWidth);
     if (m_hSocket == INVALID_SOCKET) {
         AfxMessageBox(_T("Socket khong hop le"), MB_ICONERROR);
         EndDialog(IDCANCEL);
         return FALSE;
     }
     InterlockedExchange(&m_bRunning, 1L);
-    m_hRecvThread = CreateThread(NULL, 0, RecvThreadProc, (LPVOID)this, 0, &m_dwRecvThreadId);
+    m_hRecvThread = CreateThread(NULL, 0, RecvThreadProc, (LPVOID)this, 0, NULL);
     if (m_hRecvThread == NULL) {
         AfxMessageBox(_T("Khong the tao recv thread"), MB_ICONERROR);
         EndDialog(IDCANCEL);
@@ -162,16 +160,11 @@ BOOL CChatClientDlg::PreTranslateMessage(MSG* pMsg)
 {
     if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN) {
         if (GetFocus() == &m_editMessage) {
-            enterSend();
+            OnBnClickedButtonSend();
             return TRUE;
         }
     }
     return CDialogEx::PreTranslateMessage(pMsg);
-}
-
-void CChatClientDlg::enterSend()
-{
-    OnBnClickedButtonSend();
 }
 
 DWORD WINAPI CChatClientDlg::RecvThreadProc(LPVOID lpParam)
@@ -206,10 +199,7 @@ void CChatClientDlg::RecvThreadFunc()
             string receiver = resJson.value("receiver", "");
             string content = resJson.value("content", "");
             string timeStr = resJson.value("time", "");
-            int isRead = 0;
-            if (resJson.contains("isRead")) {
-                isRead = resJson["isRead"].get<int>();
-            }
+            int isRead = resJson.value("isRead", 0);
             if (!sender.empty() && !content.empty()) {
                 TinNhan* pMsg = new TinNhan();
                 pMsg->sender = KetNoi::toCString(sender);
@@ -263,9 +253,7 @@ void CChatClientDlg::RecvThreadFunc()
                         m.receiver = KetNoi::toCString(item.value("receiver", ""));
                         m.content = KetNoi::toCString(item.value("content", ""));
                         m.time = KetNoi::toCString(item.value("time", ""));
-                        if (item.contains("isRead")) {
-                            m.daXem = item["isRead"].get<int>();
-                        }
+                        m.daXem = item.value("isRead", 0);
                         pEvt->dsTinNhan.push_back(m);
                     }
                 }
@@ -286,7 +274,6 @@ LRESULT CChatClientDlg::OnReceiveMessage(WPARAM, LPARAM lParam)
     if (m_strSelectedFriend.CompareNoCase(pMsg->sender) == 0) {
         loadLichSu(m_strSelectedFriend);
     }
-
     delete pMsg;
     return 0;
 }
@@ -297,10 +284,14 @@ LRESULT CChatClientDlg::OnReceiveHistory(WPARAM, LPARAM lParam)
     if (!pEvt) return 0;
 
     if (pEvt->friendName.CompareNoCase(m_strSelectedFriend) == 0) {
+        m_richChat.SetRedraw(FALSE);
         m_richChat.SetWindowTextW(_T(""));
         for (const auto& m : pEvt->dsTinNhan) {
             hienThiTin(m.sender, m.content, m.time, m.daXem);
         }
+        m_richChat.SetRedraw(TRUE);
+        m_richChat.Invalidate();
+        m_richChat.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
     }
     delete pEvt;
     return 0;
@@ -310,7 +301,6 @@ LRESULT CChatClientDlg::OnMessageStatus(WPARAM, LPARAM lParam)
 {
     ThongBaoDaXem* pEvt = reinterpret_cast<ThongBaoDaXem*>(lParam);
     if (!pEvt) return 0;
-
     if (!m_strSelectedFriend.IsEmpty() && pEvt->nguoiXem.CompareNoCase(m_strSelectedFriend) == 0) {
         loadLichSu(m_strSelectedFriend);
     }
@@ -322,7 +312,6 @@ LRESULT CChatClientDlg::OnUserStatus(WPARAM, LPARAM lParam)
 {
     TrangThaiUser* pEvt = reinterpret_cast<TrangThaiUser*>(lParam);
     if (!pEvt) return 0;
-
     updateDanhSachBan(pEvt->username, pEvt->isOnline);
     delete pEvt;
     return 0;
@@ -343,9 +332,9 @@ void CChatClientDlg::OnNMClickListFriends(NMHDR* pNMHDR, LRESULT* pResult)
     LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
     int nItem = (pNMItemActivate != nullptr) ? pNMItemActivate->iItem : -1;
     if (nItem == -1) {
-        POSITION pos = m_listOnline.GetFirstSelectedItemPosition();
+        POSITION pos = m_listFriends.GetFirstSelectedItemPosition();
         if (pos != NULL) {
-            nItem = m_listOnline.GetNextSelectedItem(pos);
+            nItem = m_listFriends.GetNextSelectedItem(pos);
         }
     }
     if (nItem != -1) {
@@ -356,8 +345,8 @@ void CChatClientDlg::OnNMClickListFriends(NMHDR* pNMHDR, LRESULT* pResult)
 
 void CChatClientDlg::chonBan(int nIndex)
 {
-    if (nIndex < 0 || nIndex >= m_listOnline.GetItemCount()) return;
-    CString strItem = m_listOnline.GetItemText(nIndex, 0);
+    if (nIndex < 0 || nIndex >= m_listFriends.GetItemCount()) return;
+    CString strItem = m_listFriends.GetItemText(nIndex, 0);
 
     int spacePos = strItem.Find(_T(' '));
     CString friendName = (spacePos != -1) ? strItem.Left(spacePos) : strItem;
@@ -399,7 +388,7 @@ void CChatClientDlg::OnBnClickedButtonSend()
     string receiverUtf8 = KetNoi::toUtf8(m_strSelectedFriend);
     string contentUtf8 = KetNoi::toUtf8(strContent);
     string timeStr = KetNoi::getTime();
-    if (!sendMessage(receiverUtf8, contentUtf8)) {
+    if (!sendMessage(receiverUtf8, contentUtf8, timeStr)) {
         return;
     }
     hienThiTin(m_strCurrentUsername, strContent, KetNoi::toCString(timeStr), 0);
@@ -407,10 +396,9 @@ void CChatClientDlg::OnBnClickedButtonSend()
     m_editMessage.SetFocus();
 }
 
-bool CChatClientDlg::sendMessage(const string& receiver, const string& content)
+bool CChatClientDlg::sendMessage(const string& receiver, const string& content, const string& timeStr)
 {
     string senderUtf8 = KetNoi::toUtf8(m_strCurrentUsername);
-    string timeStr = KetNoi::getTime();
     json packet = {{"sender", senderUtf8},{"receiver", receiver},{"content", content},{"time", timeStr}};
     return KetNoi::sendPacket(m_hSocket, ACTION_CHAT, packet.dump());
 }
@@ -419,7 +407,6 @@ void CChatClientDlg::themDongChat(const CString& text, COLORREF color, bool bBol
 {
     long nStart = m_richChat.GetTextLength();
     m_richChat.SetSel(nStart, nStart);
-
     PARAFORMAT2 pf{};
     pf.cbSize = sizeof(pf);
     pf.dwMask = PFM_ALIGNMENT;
@@ -432,7 +419,6 @@ void CChatClientDlg::themDongChat(const CString& text, COLORREF color, bool bBol
         pf.dxStartIndent = 150;
     }
     m_richChat.SendMessage(EM_SETPARAFORMAT, 0, (LPARAM)&pf);
-
     CHARFORMAT2 cf{};
     cf.cbSize = sizeof(cf);
     cf.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE | CFM_FACE;
@@ -441,9 +427,7 @@ void CChatClientDlg::themDongChat(const CString& text, COLORREF color, bool bBol
     cf.yHeight = fontSize;
     _tcscpy_s(cf.szFaceName, _T("Segoe UI"));
     m_richChat.SendMessage(EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
-
     m_richChat.ReplaceSel(text + _T("\r\n"));
-    m_richChat.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 }
 
 void CChatClientDlg::hienThiTin(const CString& sender, const CString& content, const CString& time, int isRead)
@@ -453,22 +437,14 @@ void CChatClientDlg::hienThiTin(const CString& sender, const CString& content, c
     if (spaceIndex != -1) {
         shortTime = shortTime.Mid(spaceIndex + 1);
     }
-
     if (sender.CompareNoCase(m_strCurrentUsername) == 0) {
-        // Tin nhắn của mình gửi đi (Căn phải phong cách hiện đại)
         themDongChat(content, RGB(25, 25, 25), false, PFA_RIGHT, 210);
-
-        CString subInfo = shortTime;
-        if (isRead == 1) {
-            subInfo = shortTime.IsEmpty() ? _T("Da xem") : shortTime + _T("  Da xem");
-            themDongChat(subInfo, RGB(0, 120, 215), false, PFA_RIGHT, 150);
-        } else {
-            subInfo = shortTime.IsEmpty() ? _T("Da nhan") : shortTime + _T("  Da nhan");
-            themDongChat(subInfo, RGB(130, 130, 130), false, PFA_RIGHT, 150);
-        }
+        CString status = (isRead == 1) ? _T("Da xem") : _T("Da nhan");
+        COLORREF statusColor = (isRead == 1) ? RGB(0, 120, 215) : RGB(130, 130, 130);
+        CString subInfo = shortTime.IsEmpty() ? status : (shortTime + _T("  ") + status);
+        themDongChat(subInfo, statusColor, false, PFA_RIGHT, 150);
         themDongChat(_T(""), RGB(0, 0, 0), false, PFA_RIGHT, 80);
     } else {
-        // Tin nhắn của bạn bè gửi đến (Căn trái phong cách hiện đại)
         themDongChat(sender, RGB(0, 102, 204), true, PFA_LEFT, 180);
         themDongChat(content, RGB(25, 25, 25), false, PFA_LEFT, 210);
         if (!shortTime.IsEmpty()) {
@@ -476,6 +452,8 @@ void CChatClientDlg::hienThiTin(const CString& sender, const CString& content, c
         }
         themDongChat(_T(""), RGB(0, 0, 0), false, PFA_LEFT, 80);
     }
+
+    m_richChat.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 }
 
 int CChatClientDlg::layIconUser(const CString& username)
@@ -495,9 +473,8 @@ void CChatClientDlg::updateDanhSachBan(const CString& user, bool bOnline)
     }
     CString newText = user + (bOnline ? _T(" (online)") : _T(" (offline)"));
     int imgIdx = layIconUser(user);
-
-    for (int i = 0; i < m_listOnline.GetItemCount(); i++) {
-        CString s = m_listOnline.GetItemText(i, 0);
+    for (int i = 0; i < m_listFriends.GetItemCount(); i++) {
+        CString s = m_listFriends.GetItemText(i, 0);
         int spacePos = s.Find(_T(' '));
         CString existingName = (spacePos != -1) ? s.Left(spacePos) : s;
         if (existingName.CompareNoCase(user) == 0) {
@@ -507,12 +484,12 @@ void CChatClientDlg::updateDanhSachBan(const CString& user, bool bOnline)
             item.mask = LVIF_TEXT | LVIF_IMAGE;
             item.pszText = (LPTSTR)(LPCTSTR)newText;
             item.iImage = imgIdx;
-            m_listOnline.SetItem(&item);
+            m_listFriends.SetItem(&item);
             return;
         }
     }
-    int nItem = m_listOnline.GetItemCount();
-    m_listOnline.InsertItem(nItem, newText, imgIdx);
+    int nItem = m_listFriends.GetItemCount();
+    m_listFriends.InsertItem(nItem, newText, imgIdx);
 }
 
 void CChatClientDlg::OnDestroy()

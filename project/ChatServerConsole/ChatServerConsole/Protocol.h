@@ -16,3 +16,5 @@ struct PacketHeader {
 #define ACTION_MSG_READ    6u  
 #define RES_SUCCESS "SUCCESS"
 #define RES_FAIL    "FAIL"
+#define SERVER_DEFAULT_IP   "127.0.0.1"
+#define SERVER_DEFAULT_PORT 9999
